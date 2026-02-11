@@ -1,4 +1,4 @@
-# nav-sense
+# [nav-sense](https://www.npmjs.com/package/nav-sense)
 
 Simple keyboard navigation library for web applications, enhancing accessibility and user experience.
 
