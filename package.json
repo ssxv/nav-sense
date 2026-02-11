@@ -1,0 +1,65 @@
+{
+  "name": "nav-sense",
+  "version": "1.0.0",
+  "description": "Simple keyboard navigation library for web applications, enhancing accessibility and user experience.",
+  "main": "dist/nav-sense.js",
+  "module": "dist/nav-sense.js",
+  "types": "dist/nav-sense.d.ts",
+  "files": [
+    "dist/**/*"
+  ],
+  "scripts": {
+    "build": "tsc --project tsconfig.build.json",
+    "dev": "tsc --watch --project tsconfig.build.json",
+    "clean": "rimraf dist",
+    "prepublishOnly": "npm run clean && npm run build",
+    "test": "echo \"Tests not implemented yet\" && exit 0"
+  },
+  "keywords": [
+    "keyboard",
+    "navigation",
+    "accessibility",
+    "focus",
+    "dom",
+    "kiosk",
+    "simple",
+    "typescript",
+    "javascript"
+  ],
+  "author": {
+    "name": "Satyendra Singh",
+    "email": "satyendraxv@gmail.com"
+  },
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/ssxv/nav-sense.git"
+  },
+  "bugs": {
+    "url": "https://github.com/ssxv/nav-sense/issues"
+  },
+  "homepage": "https://github.com/ssxv/nav-sense#readme",
+  "devDependencies": {
+    "@types/node": "^20.19.33",
+    "rimraf": "^5.0.0",
+    "typescript": "^5.9.3"
+  },
+  "engines": {
+    "node": ">=14.0.0"
+  },
+  "browserslist": [
+    "> 1%",
+    "last 2 versions",
+    "not dead",
+    "not ie 11"
+  ],
+  "exports": {
+    ".": {
+      "import": "./dist/nav-sense.js",
+      "require": "./dist/nav-sense.js",
+      "types": "./dist/nav-sense.d.ts"
+    },
+    "./package.json": "./package.json"
+  },
+  "sideEffects": false
+}
