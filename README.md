@@ -4,18 +4,18 @@ Simple keyboard navigation library for web applications, enhancing accessibility
 
 ## Features
 
-- 🎯 **Smart Element Detection** - Intelligent visibility and obstruction detection
-- 🚫 **Obstruction Handling** - Advanced visibility checking that handles overlays and obscured elements
-- ⌨️ **Physical Keyboard Detection** - Automatic detection between physical and virtual keyboards
-- 🎛️ **Conditional Key Handling** - Skip navigation based on application state (e.g., virtual keyboards)
-- 🔄 **Custom Element Ordering** - Full control over focus order with custom sorting functions
-- 📊 **Debug Mode** - Comprehensive logging with performance tracking
-- 🎨 **Configurable Selectors** - Customize which elements are considered focusable
-- 🔔 **Event Callbacks** - React to focus changes, enter events, and keyboard detection
-- 🔄 **DOM Monitoring** - Automatic updates when DOM structure changes
-- 📦 **Zero Dependencies** - Pure JavaScript with no external dependencies
-- 🏗️ **Framework Agnostic** - Works with any framework or vanilla JavaScript
-- 📘 **TypeScript Support** - Full type definitions included
+- **Smart Element Detection** - Intelligent visibility and obstruction detection
+- **Obstruction Handling** - Advanced visibility checking that handles overlays and obscured elements
+- **Physical Keyboard Detection** - Automatic detection between physical and virtual keyboards
+- **Conditional Key Handling** - Skip navigation based on application state (e.g., virtual keyboards)
+- **Custom Element Ordering** - Full control over focus order with custom sorting functions
+- **Debug Mode** - Comprehensive logging with performance tracking
+- **Configurable Selectors** - Customize which elements are considered focusable
+- **Event Callbacks** - React to focus changes, enter events, and keyboard detection
+- **DOM Monitoring** - Automatic updates when DOM structure changes
+- **Zero Dependencies** - Pure JavaScript with no external dependencies
+- **Framework Agnostic** - Works with any framework or vanilla JavaScript
+- **TypeScript Support** - Full type definitions included
 
 ## Installation
 
