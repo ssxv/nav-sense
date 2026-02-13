@@ -31,14 +31,16 @@ export interface NavSenseConfig {
   readonly focusableSelectors?: string[];
 
   /**
-   * CSS selectors that define boundary elements for scrollable container traversal.
+   * Element IDs that define boundary elements for scrollable container traversal.
    * When searching for scrollable ancestors, navigation stops at these elements.
    * Prevents traversing beyond layout containers or specific DOM boundaries.
    *
-   * @default ['#__layout', 'body']
+   * **Important: Only provide element IDs (without '#' prefix). Classes and tag selectors are not supported.**
+   *
+   * @default ['__layout']
    *
    * @example
-   * boundarySelectors: ['#app', '.modal-container', 'body']
+   * boundarySelectors: ['app', 'modal-container', 'main-content']
    */
   readonly boundarySelectors?: string[];
 
@@ -162,6 +164,20 @@ export interface NavSenseConfig {
 let focusableElements: Element[] = [];
 let hasPhysicalKeyboard = false;
 let config: NavSenseConfig = {};
+const defaultSelectors = [
+  'button:not([disabled])',
+  'input:not([disabled]):not([tabindex="-1"])',
+  '[tabindex="0"]:not([disabled])',
+  'textarea:not([disabled])',
+  'select:not([disabled])',
+  'a[href]:not([disabled])',
+  '[contenteditable]:not([disabled])',
+  '[role="button"]:not([disabled])',
+  '[role="link"]:not([disabled])',
+  '[role="textbox"]:not([disabled])'
+];
+let combinedSelectors: string = defaultSelectors.join(', ');
+let boundaryIds = ['__layout'];
 
 /**
  * Debug logging helper - only logs when debug mode is enabled
@@ -225,9 +241,20 @@ export const isUnobstructed = (el: Element): boolean => {
   if (!topElement) {
     return false;
   }
+  const containsTop = el.contains(topElement);
+  if (el !== topElement && !containsTop) {
+    return false;
+  }
 
-  // Check if the element at that point is the element itself or a child of it
-  return el === topElement || el.contains(topElement);
+  if (containsTop && !isScrollable(el)) {
+    const topRect = topElement.getBoundingClientRect();
+    // topElement is visually larger than el
+    if (topRect.width > rect.width || topRect.height > rect.height) {
+      return false;
+    }
+  }
+
+  return true;
 };
 
 /**
@@ -237,39 +264,20 @@ export const isUnobstructed = (el: Element): boolean => {
  * @returns {HTMLElement | null} The nearest scrollable container element, or null if none found.
  */
 export const findScrollableContainer = (el: Element): HTMLElement | null => {
-  const boundarySelectors = config.boundarySelectors || ['#__layout', 'body'];
   let parent = el.parentElement;
 
-  debugLog('Finding scrollable container for element:', el);
-
   while (parent) {
-    // Stop if we hit a boundary selector
-    const hitBoundary = boundarySelectors.some(selector => {
-      try {
-        const matches = parent!.matches(selector);
-        if (matches) {
-          debugLog(`Hit boundary selector '${selector}' at element:`, parent);
-        }
-        return matches;
-      } catch {
-        debugLog(`Invalid boundary selector '${selector}' - ignoring`);
-        return false;
-      }
-    });
-
-    if (hitBoundary) {
+    if (boundaryIds.includes(parent.id) || parent.tagName.toLowerCase() === 'body') {
       break;
     }
 
     if (isScrollable(parent)) {
-      debugLog('Found scrollable container:', parent);
       return parent;
     }
 
     parent = parent.parentElement;
   }
 
-  debugLog('No scrollable container found for element:', el);
   return null;
 };
 
@@ -287,81 +295,31 @@ export const isInsideUnobstructedScrollContainer = (el: Element): boolean => {
  * Gets all focusable elements from the DOM
  */
 const getFocusableElements = (): Element[] => {
-  const selectors = config.focusableSelectors || [
-    'button:not([disabled])',
-    'input:not([disabled]):not([tabindex="-1"])',
-    '[tabindex="0"]:not([disabled])',
-    'textarea:not([disabled])',
-    'select:not([disabled])',
-    'a[href]:not([disabled])',
-    '[contenteditable]:not([disabled])',
-    '[role="button"]:not([disabled])',
-    '[role="link"]:not([disabled])',
-    '[role="textbox"]:not([disabled])'
-  ];
+  // Use pre-validated combined selectors and remove duplicates in one step
+  const uniqueVisibleElements = [...new Set([...document.querySelectorAll(combinedSelectors)].filter(isVisible))];
 
-  debugLog('Getting focusable elements with selectors:', selectors);
-
-  const allElements: Element[] = [];
-
-  try {
-    const combinedSelectors = selectors.join(', ');
-    const elements = document.querySelectorAll(combinedSelectors);
-    allElements.push(...Array.from(elements));
-    debugLog(`Found ${elements.length} elements matching combined selectors`);
-  } catch (error) {
-    console.warn(`nav-sense: Invalid combined selectors "${selectors.join(', ')}"`, error);
-    debugLog('Combined selectors failed, falling back to individual selectors');
-    // Fallback to individual selector approach if combined fails
-    for (const selector of selectors) {
-      try {
-        const elements = document.querySelectorAll(selector);
-        allElements.push(...Array.from(elements));
-        debugLog(`Selector '${selector}' found ${elements.length} elements`);
-      } catch (selectorError) {
-        console.warn(`nav-sense: Invalid selector "${selector}"`, selectorError);
-        debugLog(`Selector '${selector}' failed:`, selectorError);
-      }
+  const unobstructedSet = new Set<Element>();
+  const obstructedSet = new Set<Element>();
+  for (const el of uniqueVisibleElements) {
+    if (isUnobstructed(el)) {
+      unobstructedSet.add(el);
+    } else {
+      obstructedSet.add(el);
     }
   }
 
-  // Remove duplicates
-  const uniqueElements = Array.from(new Set(allElements));
-  debugLog(`After deduplication: ${uniqueElements.length} unique elements`);
-
-  // Filter to only visible and focusable elements
-  const filteredElements = uniqueElements.filter(el => {
-    if (!isVisible(el)) {
-      debugLog('Element filtered out (not visible):', el);
-      return false;
+  const scrollContainerSet = new Set<Element>();
+  for (const el of obstructedSet) {
+    if (isInsideUnobstructedScrollContainer(el)) {
+      scrollContainerSet.add(el);
     }
+  }
 
-    // If element is unobstructed, it's definitely focusable
-    if (isUnobstructed(el)) {
-      debugLog('Element included (unobstructed):', el);
-      return true;
-    }
-
-    // If obstructed, check if it's in an unobstructed scroll container
-    const inScrollContainer = isInsideUnobstructedScrollContainer(el);
-    if (inScrollContainer) {
-      debugLog('Element included (in unobstructed scroll container):', el);
-    } else {
-      debugLog('Element filtered out (obstructed and not in scroll container):', el);
-    }
-    return inScrollContainer;
-  });
-
-  debugLog(`After visibility/obstruction filtering: ${filteredElements.length} focusable elements`);
+  const filteredElements = uniqueVisibleElements.filter(el => unobstructedSet.has(el) || scrollContainerSet.has(el));
 
   // Apply custom ordering if provided
   const finalElements = config.customOrder ? config.customOrder(filteredElements) : filteredElements;
 
-  if (config.customOrder) {
-    debugLog(`After custom ordering: ${finalElements.length} elements`, finalElements);
-  }
-
-  debugLog('Final focusable elements:', finalElements);
   return finalElements;
 };
 
@@ -371,22 +329,16 @@ const getFocusableElements = (): Element[] => {
 export const setFocus = (el: Element): boolean => {
   try {
     if (el && typeof (el as HTMLElement).focus === 'function') {
-      debugLog('Attempting to focus element:', el);
       (el as HTMLElement).focus();
       const success = document.activeElement === el;
       if (success) {
-        debugLog('Successfully focused element:', el);
         config.onFocusChange?.(el);
-      } else {
-        debugLog('Failed to focus element (activeElement mismatch):', el, 'activeElement:', document.activeElement);
       }
       return success;
     }
-    debugLog('Cannot focus element (no focus method):', el);
     return false;
   } catch (error) {
     console.warn('nav-sense: Failed to set focus on element', el, error);
-    debugLog('Focus attempt threw error:', error);
     return false;
   }
 };
@@ -412,24 +364,21 @@ export const focusOnTheNextFocusableElement = (currentElement: HTMLElement): boo
  * Simulates tab navigation
  */
 export const simulateTab = (): Element | null => {
-  debugLog('Simulating Tab navigation');
-
   if (!focusableElements.length) {
-    debugLog('No focusable elements cached, updating list');
     updateFocusableElements();
   }
 
   const activeElement = document.activeElement;
-  debugLog('Current active element:', activeElement);
 
   if (!activeElement) {
     // No current focus, focus first element
     if (focusableElements.length > 0) {
-      debugLog('No active element, focusing first element:', focusableElements[0]);
       setFocus(focusableElements[0]);
+      debugLog(
+        `Tab: null -> ${(focusableElements[0] as HTMLElement).tagName}#${(focusableElements[0] as HTMLElement).id || 'no-id'}`
+      );
       return focusableElements[0];
     }
-    debugLog('No focusable elements available');
     return null;
   }
 
@@ -438,27 +387,24 @@ export const simulateTab = (): Element | null => {
 
   if (currentIndex === -1) {
     // Current element not in our list, focus first
-    debugLog('Active element not in focusable list, focusing first element');
     nextIndex = 0;
   } else {
     // Move to next element
     nextIndex = currentIndex + 1;
     if (nextIndex >= focusableElements.length) {
       nextIndex = 0; // Loop back to first
-      debugLog(`Reached end of list (${focusableElements.length}), looping to first`);
-    } else {
-      debugLog(`Moving from index ${currentIndex} to ${nextIndex}`);
     }
   }
 
   if (nextIndex < focusableElements.length) {
     const targetElement = focusableElements[nextIndex];
-    debugLog('Focusing next element:', targetElement);
     setFocus(targetElement);
+    const fromEl = activeElement as HTMLElement;
+    const toEl = targetElement as HTMLElement;
+    debugLog(`Tab: ${fromEl.tagName}#${fromEl.id || 'no-id'} -> ${toEl.tagName}#${toEl.id || 'no-id'}`);
     return targetElement;
   }
 
-  debugLog('Tab navigation failed - no valid next element');
   return null;
 };
 
@@ -466,25 +412,22 @@ export const simulateTab = (): Element | null => {
  * Simulates shift+tab navigation
  */
 export const simulateShiftTab = (): Element | null => {
-  debugLog('Simulating Shift+Tab navigation');
-
   if (!focusableElements.length) {
-    debugLog('No focusable elements cached, updating list');
     updateFocusableElements();
   }
 
   const activeElement = document.activeElement;
-  debugLog('Current active element:', activeElement);
 
   if (!activeElement) {
     // No current focus, focus last element
     if (focusableElements.length > 0) {
       const lastIndex = focusableElements.length - 1;
-      debugLog('No active element, focusing last element:', focusableElements[lastIndex]);
       setFocus(focusableElements[lastIndex]);
+      debugLog(
+        `Shift+Tab: null -> ${(focusableElements[lastIndex] as HTMLElement).tagName}#${(focusableElements[lastIndex] as HTMLElement).id || 'no-id'}`
+      );
       return focusableElements[lastIndex];
     }
-    debugLog('No focusable elements available');
     return null;
   }
 
@@ -493,27 +436,24 @@ export const simulateShiftTab = (): Element | null => {
 
   if (currentIndex === -1) {
     // Current element not in our list, focus last
-    debugLog('Active element not in focusable list, focusing last element');
     prevIndex = focusableElements.length - 1;
   } else {
     // Move to previous element
     prevIndex = currentIndex - 1;
     if (prevIndex < 0) {
       prevIndex = focusableElements.length - 1; // Loop to last
-      debugLog(`Reached beginning of list, looping to last (index ${prevIndex})`);
-    } else {
-      debugLog(`Moving from index ${currentIndex} to ${prevIndex}`);
     }
   }
 
   if (prevIndex >= 0 && prevIndex < focusableElements.length) {
     const targetElement = focusableElements[prevIndex];
-    debugLog('Focusing previous element:', targetElement);
     setFocus(targetElement);
+    const fromEl = activeElement as HTMLElement;
+    const toEl = targetElement as HTMLElement;
+    debugLog(`Shift+Tab: ${fromEl.tagName}#${fromEl.id || 'no-id'} -> ${toEl.tagName}#${toEl.id || 'no-id'}`);
     return targetElement;
   }
 
-  debugLog('Shift+Tab navigation failed - no valid previous element');
   return null;
 };
 
@@ -522,19 +462,14 @@ export const simulateShiftTab = (): Element | null => {
  */
 export const simulateEnter = (): Element | null => {
   const activeElement = document.activeElement;
-  debugLog('Simulating Enter key on active element:', activeElement);
 
   if (activeElement && typeof (activeElement as HTMLElement).click === 'function') {
     try {
-      debugLog('Clicking active element:', activeElement);
       (activeElement as HTMLElement).click();
       return activeElement;
     } catch (error) {
       console.warn('nav-sense: Failed to click active element', activeElement, error);
-      debugLog('Click failed with error:', error);
     }
-  } else {
-    debugLog('Cannot click - no active element or no click method');
   }
 
   return null;
@@ -544,18 +479,20 @@ export const simulateEnter = (): Element | null => {
  * Updates the focusable elements list
  */
 export const updateFocusableElements = (): void => {
-  debugLog('Updating focusable elements list');
-  const oldCount = focusableElements.length;
+  if (config.debug) {
+    const oldCount = focusableElements.length;
+    const start = performance.now();
+    focusableElements = getFocusableElements();
+    const end = performance.now();
 
-  const start = performance.now();
-  focusableElements = getFocusableElements();
-  const end = performance.now();
-
-  debugLog(
-    `Focusable elements updated: ${oldCount} -> ${focusableElements.length}`,
-    focusableElements,
-    `Execution time: ${(end - start).toFixed(2)} ms`
-  );
+    debugLog(
+      `Focusable elements updated: ${oldCount} -> ${focusableElements.length}`,
+      focusableElements,
+      `Execution time: ${(end - start).toFixed(2)} ms`
+    );
+  } else {
+    focusableElements = getFocusableElements();
+  }
 };
 
 /**
@@ -584,26 +521,22 @@ const onKeyDown = (event: KeyboardEvent) => {
 
   // Allow user to conditionally override key handling
   if (config.shouldHandleKey && !config.shouldHandleKey(event)) {
-    debugLog('Key handling skipped by shouldHandleKey callback:', event.key);
     return;
   }
 
   if (event.key === 'Tab' && event.shiftKey) {
-    debugLog('Shift+Tab key pressed');
     event.preventDefault();
     simulateShiftTab();
     return;
   }
 
   if (event.key === 'Tab') {
-    debugLog('Tab key pressed');
     event.preventDefault();
     simulateTab();
     return;
   }
 
   if (event.key === 'Enter') {
-    debugLog('Enter key pressed');
     event.preventDefault();
     const activeElement = simulateEnter();
     config.onFocusChange?.(activeElement);
@@ -615,9 +548,6 @@ const onKeyDown = (event: KeyboardEvent) => {
  * Touch event handler
  */
 const onTouchStart = () => {
-  if (hasPhysicalKeyboard) {
-    debugLog('Touch input detected - switching from physical keyboard mode');
-  }
   hasPhysicalKeyboard = false;
   config.onKeyboardToggle?.(false);
 };
@@ -637,8 +567,19 @@ export const init = (userConfig: NavSenseConfig = {}): void => {
   config = { ...config, ...userConfig };
   debugLog('Merged config:', config);
 
-  // Initial setup
-  // updateFocusableElements();
+  // Set boundary IDs from config or use defaults
+  boundaryIds = config.boundarySelectors || ['__layout'];
+
+  // Get selectors from config or use defaults
+  const selectors = config.focusableSelectors || defaultSelectors;
+  combinedSelectors = selectors.join(', ');
+  try {
+    // Test the combined selectors
+    document.querySelector(combinedSelectors);
+  } catch (error) {
+    console.error('nav-sense: Invalid selectors provided, falling back to defaults:', error);
+    combinedSelectors = defaultSelectors.join(', ');
+  }
 
   // Set up event listeners
   document.addEventListener('keydown', onKeyDown, true);
@@ -652,7 +593,6 @@ export const init = (userConfig: NavSenseConfig = {}): void => {
   }
 
   observer = new MutationObserver(() => {
-    debugLog('DOM mutations detected, resetting focusable elements');
     resetFocusableElements();
   });
 

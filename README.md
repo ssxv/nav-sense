@@ -85,8 +85,8 @@ init({
   // Custom focusable selectors
   focusableSelectors: ['button:not([disabled])', 'input:not([disabled])', '.custom-focusable'],
 
-  // Custom boundary selectors for scrollable containers
-  boundarySelectors: ['#app', '.modal-container', 'body']
+  // Custom boundary selectors for scrollable containers (element IDs only, without '#' prefix)
+  boundarySelectors: ['app', 'modal-container', 'main-content']
 });
 ```
 
